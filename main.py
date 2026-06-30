@@ -11,6 +11,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After", "X-Request-ID"],
 )
 
 TOTAL_ORDERS = 52
@@ -30,9 +31,11 @@ async def rate_limit_middleware(request: Request, call_next):
     bucket[:] = [t for t in bucket if now - t < RATE_LIMIT_WINDOW_SECONDS]
 
     if len(bucket) >= RATE_LIMIT_R:
-        # IMPORTANT: manually attach CORS headers here, since this response is
-        # returned before reaching CORSMiddleware's own response-wrapping logic.
-        # Without this, browsers report a misleading "CORS error" instead of 429.
+        # IMPORTANT: this response is returned before reaching CORSMiddleware's own
+        # response-wrapping logic, so we must manually attach ALL the CORS headers
+        # here, including Access-Control-Expose-Headers - otherwise browsers can
+        # see the response failed but JS code cannot read custom headers like
+        # Retry-After from it, even though curl/Python requests can see them fine.
         origin = request.headers.get("origin", "*")
         return JSONResponse(
             status_code=429,
@@ -40,6 +43,7 @@ async def rate_limit_middleware(request: Request, call_next):
             headers={
                 "Retry-After": str(RATE_LIMIT_WINDOW_SECONDS),
                 "Access-Control-Allow-Origin": origin if origin else "*",
+                "Access-Control-Expose-Headers": "Retry-After, X-Request-ID",
             },
         )
 
@@ -79,6 +83,8 @@ async def list_orders(limit: int = 10, cursor: str = None):
         "items": [{"id": i} for i in page_ids],
         "next_cursor": next_cursor,
     }
+
+
 @app.get("/")
 async def root():
     return {"status": "ok", "endpoints": ["POST /orders", "GET /orders"]}
