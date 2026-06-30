@@ -30,10 +30,17 @@ async def rate_limit_middleware(request: Request, call_next):
     bucket[:] = [t for t in bucket if now - t < RATE_LIMIT_WINDOW_SECONDS]
 
     if len(bucket) >= RATE_LIMIT_R:
+        # IMPORTANT: manually attach CORS headers here, since this response is
+        # returned before reaching CORSMiddleware's own response-wrapping logic.
+        # Without this, browsers report a misleading "CORS error" instead of 429.
+        origin = request.headers.get("origin", "*")
         return JSONResponse(
             status_code=429,
             content={"error": "rate limit exceeded"},
-            headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+            headers={
+                "Retry-After": str(RATE_LIMIT_WINDOW_SECONDS),
+                "Access-Control-Allow-Origin": origin if origin else "*",
+            },
         )
 
     bucket.append(now)
