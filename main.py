@@ -79,8 +79,6 @@ async def list_orders(limit: int = 10, cursor: str = None):
         "items": [{"id": i} for i in page_ids],
         "next_cursor": next_cursor,
     }
-
-
 @app.get("/")
 async def root():
     return {"status": "ok", "endpoints": ["POST /orders", "GET /orders"]}
